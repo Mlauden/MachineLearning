@@ -1,0 +1,114 @@
+install.packages("https://togaware.com/access/rattle_5.0.14.tar.gz", repos=NULL, type="source")---
+title: "Machine Learning Course Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+
+```{r Initialization}
+library(caret)   #Machine learning package
+library(rattle) #Fancy tree diagram 
+#Needed to install older version of Rgtk2 dependency to get this to work
+library(GGally)
+library(ggplot2)
+library(rpart)
+library(randomForest)
+
+```
+
+##Project Goal
+####The goal of your project is to predict the manner in which they did the exercise. 
+####This is the "classe" variable in the training set. 
+####You may use any of the other variables to predict with. 
+####You should create a report describing how you built your model, 
+####how you used cross validation, what you think the expected out of sample error is, 
+####and why you made the choices you did. 
+####You will also use your prediction model to predict 20 different test cases.
+
+
+###Step 1. Load data into R and break it down into training and test cases. The 70% train 30% test rule of thumb will be used for the division of data.
+
+```{r TrainTestCases, echo=TRUE}
+
+
+if(exists("Training")==FALSE){ 
+  Training<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+  Test<-read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+}
+  
+Training[Training==""] <- NA
+trainingData<-Training[,8:160]
+trainingData<-trainingData[,is.na(trainingData[1,])==FALSE] #Remove columns that have no data
+
+#Break Data down into training/test sets (70/30%)
+testIndex = createDataPartition(trainingData$classe, p = 0.70,list=FALSE)
+trainingSet = trainingData[testIndex,]
+testingSet = trainingData[-testIndex,]
+
+```
+
+###Step 2. Use the caret package to fit a predictive model to the data. For the first attempt the "rpart" model will be used.
+```{r rpart model, echo=TRUE}
+
+modFit<-train(classe~.,method="rpart",data=trainingSet, na.action = na.omit) #"train" is predictive model from caret program
+fancyRpartPlot(modFit$finalModel)
+
+print(modFit$finalModel)
+
+```
+
+###Step 3. Use the rpart model to predict new data and determine its accuracy. Also provide a visual display of the critical factor interaction to provide a more visceral understanding of the data.
+
+```{r rpart modelpredict, error=TRUE, echo=TRUE, fig.height = 11, fig.width = 11,}
+VariableImp<-varImp(modFit)
+
+#determine most important variables and plot graphical pairs
+Imp<-rownames(VariableImp$importance[1:10,,drop=FALSE])
+ImpTrainSet<-trainingSet[,Imp]
+ggpairs(trainingSet[,c(Imp,"classe")],aes(color=classe)) 
+
+classepredict=predict(modFit,testingSet,data = na.omit(data))
+#confusionMatrix(testingSet$Classe,classepredict) #Does not work because "D" is never predicted workaround below
+table(factor(classepredict, levels=min(testingSet$classe):max(testingSet$classe)), factor(testingSet$classe, levels=min(testingSet$classe):max(testingSet$classe)))
+u = union(classepredict, testingSet$classe)
+t = table(factor(classepredict, u), factor(testingSet$classe, u))
+confusionMatrix(t)
+
+```
+
+###Step 4. The rpart model only achieved a 49% accuracy based on the confusion matrix. It's possible to take two differing approaches at this point. Either try to tune the existing model or explore other potential models. Due to the poor fit of the first model, the latter approach will be explored first.
+
+```{r alternate models, error=TRUE, echo=TRUE}
+
+modFit2<-train(classe~.,method="rf",data=trainingSet, na.action = na.omit) #"train" is predictive model from caret program
+plot(modFit2$finalModel)
+
+print(modFit2$finalModel)
+VariableImp<-varImp(modFit2)
+
+#determine most important variables and plot graphical pairs
+Imp<-rownames(VariableImp$importance[1:10,,drop=FALSE])
+ImpTrainSet<-trainSet[,Imp]
+
+classepredict=predict(modFit2,testingSet,data = na.omit(data))
+#confusionMatrix(testingSet$Classe,classepredict) #Does not work because "D" is never predicted workaround below
+table(factor(classepredict, levels=min(testingSet$classe):max(testingSet$classe)), factor(testingSet$classe, levels=min(testingSet$classe):max(testingSet$classe)))
+u = union(classepredict, testingSet$classe)
+t = table(factor(classepredict, u), factor(testingSet$classe, u))
+confusionMatrix(t)
+
+```
+
+
+###The confusion matrix shows the default random forest model has a high sensitivity and specificity at the expense of being much more computational intensive. This level of accuracy should be sufficient for the current assignment.
+
+###Step 5. Use the new model to predict the next 20 test cases.
+
+```{r predictTest, echo=TRUE}
+
+pred<- predict(modFit2, newdata=Test)
+pred
+```
